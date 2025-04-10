@@ -91,11 +91,27 @@ integration-test-misc:
 	$(eval RUN_ARG=$(shell ./scripts/misc-integration-test.sh))
 	@ ./scripts/integration-test.sh -run "$(RUN_ARG)"
 
-.PHONY: k8s-executor-build-push
-k8s-executor-build-push:
+.PHONY: k8s-executor-image
+k8s-executor-image:
 	DOCKER_BUILDKIT=1 docker build ${BUILD_ARG} --build-arg=GOARCH=$(GOARCH) --build-arg=TARGETOS=linux -t $(REGISTRY)/executor:latest -f deploy/Dockerfile --target kaniko-executor .
+
+.PHONY: k8s-executor-build-push
+k8s-executor-build-push: k8s-executor-image
 	docker push $(REGISTRY)/executor:latest
 
+.PHONY: list-files-within-k8s-executor-image
+list-files-within-k8s-executor-image:
+	@docker create --name tmpfilelistcontainer $(REGISTRY)/executor:latest
+	@docker export tmpfilelistcontainer  | tar -t | tree --fromfile .
+	@docker rm tmpfilelistcontainer > /dev/null
+
+.PHONY: list-trusted-cacerts-within-k8s-executor-image
+list-trusted-cacerts-within-k8s-executor-image:
+	@docker create --name tmpfilelistcontainer $(REGISTRY)/executor:latest
+	@docker export tmpfilelistcontainer | tar -xf - kaniko/ssl/certs/ca-certificates.crt --to-stdout > trusted-cacerts-within-k8s-executor-image.crt
+	@openssl storeutl -noout -text -certs trusted-cacerts-within-k8s-executor-image.crt | grep Subject:
+	@rm -f trusted-cacerts-within-k8s-executor-image.crt
+	@docker rm tmpfilelistcontainer > /dev/null
 
 .PHONY: images
 images: DOCKER_BUILDKIT=1
